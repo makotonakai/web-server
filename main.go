@@ -7,6 +7,18 @@ import (
 	"strings"
 )
 
+const (
+	StatusOK = "200 OK"
+	StatusNotFound = "400 NotFound"
+)
+
+type Request struct {
+	Method string
+	Path string
+	Version string
+	Headers map[string]string
+}
+
 
 func main() {
 	
@@ -31,42 +43,92 @@ func main() {
 func serveClient(conn net.Conn) {
 
 	reader := bufio.NewReader(conn)
+	req := strings.Builder{}
 
 	for {
 
-		// GET / HTTP/1.1
-		// Host: localhost:8080
-		// User-Agent: curl/8.7.1
-		// Accept: */*
-		//
-		
-		msg, err := reader.ReadString('\n')
+		raw, err := getRequest(req, reader)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		req, err := parseRequest(raw)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		if req.Method == "GET" && req.Path == "/ping" {
+			writeResponse(conn, StatusOK, "pong")
+		} else {
+			writeResponse(conn, StatusNotFound, "")
+		}
+
+		return 
+	}
+}
+
+func getRequest(req strings.Builder, reader *bufio.Reader) (string, error) {
+
+	for {
+
+		line, err := reader.ReadString('\n')
 
 		if err != nil {
-			continue
+			return "", fmt.Errorf("Client request error")
 		}
 
-		req := strings.Split(msg, " ")
-
-		switch len(req) {
-
-			case 1:
-				continue
-
-			default:
-
-				method := req[0]
-				path := req[1]
-				
-				if method == "GET" && path == "/ping" {
-					conn.Write([]byte(
-						"HTTP/1.1 200 OK\r\n" +
-						"Content-Length: 4\r\n" +
-						"Content-Type: text/plain\r\n" +
-						"\r\n" +
-						"pong",
-					))
-				}
+		if line == "\r\n" {
+			break // end of headers
 		}
+
+		req.WriteString(line)
+
 	}
+
+	return req.String(), nil
+}
+
+func parseRequest(raw string) (*Request, error) {
+
+	lines := strings.Split(raw, "\r\n")
+	if len(lines) != 5 {
+		return nil, fmt.Errorf("Client request error")
+	}
+
+	parts := strings.Split(lines[0], " ")
+	req := &Request{
+		Method: parts[0],
+		Path: parts[1],
+		Version: parts[2],
+		Headers: make(map[string]string),
+	}
+
+	for _, line := range lines[1:] {
+
+		kv := strings.SplitN(line, ":", 2)
+		if len(kv) != 2 {
+					continue
+		}
+
+		key := strings.TrimSpace(strings.ToLower(kv[0])) // case-insensitive
+		value := strings.TrimSpace(kv[1])
+
+		req.Headers[key] = value
+
+	}
+
+	return req, nil
+
+}
+
+func writeResponse(conn net.Conn, status string, body string) {
+	
+	resp := fmt.Sprintf(
+		"HTTP/1.1 %s\r\nContent-Length: %d\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n%s",
+		status,
+		len(body),
+		body,
+	)
+
+	conn.Write([]byte(resp))
 }
