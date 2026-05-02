@@ -112,6 +112,10 @@ func parseRequest(raw string) (*Request, error) {
 	}
 
 	parts := strings.Split(lines[0], " ")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid request line")
+	}
+	
 	req := &Request{
 		Method: parts[0],
 		Path: parts[1],
