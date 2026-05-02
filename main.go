@@ -108,8 +108,8 @@ func getRequest(req strings.Builder, reader *bufio.Reader) (string, error) {
 func parseRequest(raw string) (*Request, error) {
 
 	lines := strings.Split(raw, "\r\n")
-	if len(lines) != 5 {
-		return nil, fmt.Errorf("Client request error")
+	if len(lines) < 1 {
+		return nil, fmt.Errorf("Invalid request")
 	}
 
 	parts := strings.Split(lines[0], " ")
