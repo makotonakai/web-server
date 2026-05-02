@@ -9,7 +9,7 @@ import (
 
 const (
 	StatusOK = "200 OK"
-	StatusNotFound = "400 Not Found"
+	StatusNotFound = "404 Not Found"
 )
 
 const (
