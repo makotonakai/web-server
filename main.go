@@ -12,6 +12,11 @@ const (
 	StatusNotFound = "400 NotFound"
 )
 
+const (
+	QUEUE_SIZE = 100
+	WORKER_SIZE = 100
+)
+
 type Request struct {
 	Method string
 	Path string
@@ -21,22 +26,34 @@ type Request struct {
 
 
 func main() {
-	
+
+	connChan := make(chan net.Conn, QUEUE_SIZE)
+
+	for i := 0; i < WORKER_SIZE; i++ {
+		go worker(connChan)
+	}
+
 	l, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		fmt.Println(err)
 	}
 	defer l.Close()
 
-	for {
 
+	for {
 		conn, err := l.Accept()
 		if err != nil {
-			fmt.Println(err)
+			continue
 		}
 
-		go serveClient(conn)
-		
+		connChan <- conn
+
+	}
+}
+
+func worker(connChan <-chan net.Conn) {
+	for conn := range connChan {
+		serveClient(conn)
 	}
 }
 
