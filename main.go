@@ -9,7 +9,7 @@ import (
 
 const (
 	StatusOK = "200 OK"
-	StatusNotFound = "400 NotFound"
+	StatusNotFound = "400 Not Found"
 )
 
 const (
@@ -76,7 +76,7 @@ func serveClient(conn net.Conn) {
 	if parsedReq.Method == "GET" && parsedReq.Path == "/ping" {
 		writeResponse(conn, StatusOK, "pong")
 	} else {
-		writeResponse(conn, StatusNotFound, "")
+		writeResponse(conn, StatusNotFound, "Not Found")
 	}
 
 }
