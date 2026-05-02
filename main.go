@@ -65,12 +65,12 @@ func serveClient(conn net.Conn) {
 
 	raw, err := getRequest(reader)
 	if err != nil {
-		fmt.Println(err)
+		return // terminate connection if an error is caused
 	}
 
 	parsedReq, err := parseRequest(raw)
 	if err != nil {
-		fmt.Println(err)
+		return // terminate connection if an error is caused
 	}
 
 	if parsedReq.Method == "GET" && parsedReq.Path == "/ping" {
