@@ -64,26 +64,22 @@ func serveClient(conn net.Conn) {
 	reader := bufio.NewReader(conn)
 	req := strings.Builder{}
 
-	for {
-
-		raw, err := getRequest(req, reader)
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		req, err := parseRequest(raw)
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		if req.Method == "GET" && req.Path == "/ping" {
-			writeResponse(conn, StatusOK, "pong")
-		} else {
-			writeResponse(conn, StatusNotFound, "")
-		}
-
-		return 
+	raw, err := getRequest(req, reader)
+	if err != nil {
+		fmt.Println(err)
 	}
+
+	parsedReq, err := parseRequest(raw)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	if parsedReq.Method == "GET" && parsedReq.Path == "/ping" {
+		writeResponse(conn, StatusOK, "pong")
+	} else {
+		writeResponse(conn, StatusNotFound, "")
+	}
+
 }
 
 func getRequest(req strings.Builder, reader *bufio.Reader) (string, error) {
