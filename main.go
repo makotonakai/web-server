@@ -62,9 +62,8 @@ func serveClient(conn net.Conn) {
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
-	req := strings.Builder{}
 
-	raw, err := getRequest(req, reader)
+	raw, err := getRequest(reader)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -82,7 +81,9 @@ func serveClient(conn net.Conn) {
 
 }
 
-func getRequest(req strings.Builder, reader *bufio.Reader) (string, error) {
+func getRequest(reader *bufio.Reader) (string, error) {
+
+	req := strings.Builder{}
 
 	for {
 
