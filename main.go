@@ -59,6 +59,8 @@ func worker(connChan <-chan net.Conn) {
 
 func serveClient(conn net.Conn) {
 
+	defer conn.Close()
+
 	reader := bufio.NewReader(conn)
 	req := strings.Builder{}
 
