@@ -102,9 +102,9 @@ func main() {
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
 
-		fmt.Println("Metrics server listening on :9090")
+		fmt.Println("Metrics server listening on :9091")
 
-		err := http.ListenAndServe(":9090", nil)
+		err := http.ListenAndServe(":9091", nil)
 		if err != nil {
 			fmt.Println("Metrics server error:", err)
 		}
