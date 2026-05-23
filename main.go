@@ -222,14 +222,14 @@ func getRequest(reader *bufio.Reader) (string, error) {
 	for {
 
 		line, err := reader.ReadString('\n')
-
 		if err != nil {
-			return "", fmt.Errorf("client request error")
+			return "", fmt.Errorf("client request error: %w", err)
 		}
 
 		req.WriteString(line)
 
-		if line == "\r\n" {
+		// End of headers
+		if strings.TrimSpace(line) == "" {
 			break
 		}
 	}
