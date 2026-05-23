@@ -19,7 +19,7 @@ const (
 
 const (
 	QUEUE_SIZE  = 100
-	WORKER_SIZE = 100
+	WORKER_SIZE = 2
 )
 
 type Request struct {
@@ -126,7 +126,7 @@ func main() {
 	fmt.Println("HTTP server listening on :8080")
 
 	for {
-
+		
 		conn, err := l.Accept()
 		if err != nil {
 			fmt.Println("Accept error:", err)
@@ -134,13 +134,13 @@ func main() {
 		}
 
 		connChan <- conn
-
 		connectionQueueDepth.Set(float64(len(connChan)))
-
 		queueUtilization.Set(
-			float64(len(connChan)) / float64(QUEUE_SIZE),
+				float64(len(connChan)) / float64(QUEUE_SIZE),
 		)
+
 	}
+
 }
 
 func worker(connChan <-chan net.Conn) {
@@ -170,9 +170,14 @@ func serveClient(conn net.Conn) {
 		conn.Close()
 	}()
 
-	time.Sleep(500 * time.Millisecond)
+	// Set the deadline, so that the connection will not be hanging forever.
+	conn.SetReadDeadline(
+		time.Now().Add(5 * time.Second),
+	)
 
 	start := time.Now()
+
+	time.Sleep(500 * time.Millisecond)
 
 	reader := bufio.NewReader(conn)
 
