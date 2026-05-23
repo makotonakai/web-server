@@ -5,8 +5,8 @@
     "name": "adptjln",
     "namespace": "default",
     "uid": "0238cbb2-2bee-4fc8-a0df-893a434a0d3d",
-    "resourceVersion": "1778685374220988",
-    "generation": 15,
+    "resourceVersion": "1779520995163008",
+    "generation": 16,
     "creationTimestamp": "2026-05-13T14:34:35Z",
     "labels": {
       "grafana.app/deprecatedInternalID": "929580769849344"
@@ -16,7 +16,7 @@
       "grafana.app/folder": "",
       "grafana.app/saved-from-ui": "Grafana v13.0.1+security-01 (9bbe672d)",
       "grafana.app/updatedBy": "user:dfly33vd9mxhcd",
-      "grafana.app/updatedTimestamp": "2026-05-13T15:16:14Z"
+      "grafana.app/updatedTimestamp": "2026-05-23T07:23:15Z"
     }
   },
   "spec": {
@@ -186,7 +186,7 @@
                       },
                       "spec": {
                         "editorMode": "builder",
-                        "expr": "http_request_duration_seconds_bucket{method=\"$method\", path=\"$path\", le=\"+Inf\"}",
+                        "expr": "histogram_quantile(0.95, sum by(le) (rate(http_request_duration_seconds_bucket{method=\"$method\", path=\"$path\"}[5m])))",
                         "legendFormat": "http_request_duration_seconds_bucket",
                         "range": true
                       }
