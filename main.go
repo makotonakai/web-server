@@ -1,12 +1,12 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"net"
-	"net/http"
-	"strings"
 	"time"
+	"bufio"
+	"strings"
+	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -169,6 +169,8 @@ func serveClient(conn net.Conn) {
 		activeConnections.Dec()
 		conn.Close()
 	}()
+
+	time.Sleep(500 * time.Millisecond)
 
 	start := time.Now()
 
