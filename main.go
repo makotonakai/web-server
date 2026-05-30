@@ -265,13 +265,13 @@ func serveClient(conn net.Conn) {
 		conn.Close()
 	}()
 
-	conn.SetReadDeadline(
-		time.Now().Add(5 * time.Second),
-	)
+	// conn.SetReadDeadline(
+	// 	time.Now().Add(5 * time.Second),
+	// )
 
-	conn.SetWriteDeadline(
-		time.Now().Add(5 * time.Second),
-	)
+	// conn.SetWriteDeadline(
+	// 	time.Now().Add(5 * time.Second),
+	// )
 
 	start := time.Now()
 
