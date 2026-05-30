@@ -1,12 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
-	"time"
-	"bufio"
-	"strings"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -18,8 +18,9 @@ const (
 )
 
 const (
-	QUEUE_SIZE  = 100
-	WORKER_SIZE = 2
+	// 負荷試験のパラメータの根拠
+	QUEUE_SIZE  = 100 // request size?
+	WORKER_SIZE = 100 // psで確認する
 )
 
 type Request struct {
@@ -27,6 +28,11 @@ type Request struct {
 	Path    string
 	Version string
 	Headers map[string]string
+}
+
+type Job struct {
+	Conn     net.Conn
+	QueuedAt time.Time
 }
 
 var (
@@ -40,11 +46,48 @@ var (
 
 	requestDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "http_request_duration_seconds",
-			Help:    "Request latency in seconds",
-			Buckets: prometheus.DefBuckets,
+			Name: "http_request_duration_seconds",
+			Help: "End-to-end request latency in seconds",
+			Buckets: []float64{
+				0.001,
+				0.005,
+				0.01,
+				0.025,
+				0.05,
+				0.1,
+				0.25,
+				0.5,
+				1,
+				2,
+				5,
+			},
 		},
 		[]string{"method", "path"},
+	)
+
+	queueDelay = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name: "connection_queue_delay_seconds",
+			Help: "Time spent waiting in queue before worker pickup",
+			Buckets: []float64{
+				0.001,
+				0.01,
+				0.05,
+				0.1,
+				0.25,
+				0.5,
+				1,
+				2,
+				5,
+			},
+		},
+	)
+
+	acceptedConnections = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "accepted_connections_total",
+			Help: "Total accepted TCP connections",
+		},
 	)
 
 	activeConnections = prometheus.NewGauge(
@@ -81,6 +124,13 @@ var (
 			Help: "Total request parsing/processing errors",
 		},
 	)
+
+	droppedConnections = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "dropped_connections_total",
+			Help: "Connections dropped because queue is full",
+		},
+	)
 )
 
 func init() {
@@ -88,18 +138,39 @@ func init() {
 	prometheus.MustRegister(
 		requestsTotal,
 		requestDuration,
+		queueDelay,
+		acceptedConnections,
 		activeConnections,
 		connectionQueueDepth,
 		queueUtilization,
 		busyWorkers,
 		requestErrors,
+		droppedConnections,
+	)
+
+	// Initialize metrics with zero values
+	requestsTotal.WithLabelValues(
+		"GET",
+		"/ping",
+		StatusOK,
+	)
+
+	requestsTotal.WithLabelValues(
+		"GET",
+		"/ping",
+		StatusNotFound,
+	)
+
+	requestDuration.WithLabelValues(
+		"GET",
+		"/ping",
 	)
 }
 
 func main() {
 
-	// Prometheus metrics endpoint
 	go func() {
+
 		http.Handle("/metrics", promhttp.Handler())
 
 		fmt.Println("Metrics server listening on :9091")
@@ -110,11 +181,28 @@ func main() {
 		}
 	}()
 
-	connChan := make(chan net.Conn, QUEUE_SIZE)
+	jobChan := make(chan Job, QUEUE_SIZE)
 
 	for i := 0; i < WORKER_SIZE; i++ {
-		go worker(connChan)
+		go worker(jobChan)
 	}
+
+	// Periodic queue metrics updater
+	go func() {
+
+		ticker := time.NewTicker(100 * time.Millisecond)
+
+		for range ticker.C {
+
+			depth := len(jobChan)
+
+			connectionQueueDepth.Set(float64(depth))
+
+			queueUtilization.Set(
+				float64(depth) / float64(QUEUE_SIZE),
+			)
+		}
+	}()
 
 	l, err := net.Listen("tcp", ":8080")
 	if err != nil {
@@ -126,38 +214,45 @@ func main() {
 	fmt.Println("HTTP server listening on :8080")
 
 	for {
-		
+
 		conn, err := l.Accept()
+		acceptedConnections.Inc()
+
 		if err != nil {
 			fmt.Println("Accept error:", err)
 			continue
 		}
 
-		connChan <- conn
-		connectionQueueDepth.Set(float64(len(connChan)))
-		queueUtilization.Set(
-				float64(len(connChan)) / float64(QUEUE_SIZE),
-		)
+		job := Job{
+			Conn:     conn,
+			QueuedAt: time.Now(),
+		}
 
+		// Load shedding when queue is full
+		select {
+
+		case jobChan <- job:
+
+		default:
+			droppedConnections.Inc()
+			conn.Close()
+		}
 	}
-
 }
 
-func worker(connChan <-chan net.Conn) {
+func worker(jobChan <-chan Job) {
 
-	for conn := range connChan {
+	for job := range jobChan {
 
 		busyWorkers.Inc()
 
-		serveClient(conn)
+		queueDelay.Observe(
+			time.Since(job.QueuedAt).Seconds(),
+		)
+
+		serveClient(job.Conn)
 
 		busyWorkers.Dec()
-
-		connectionQueueDepth.Set(float64(len(connChan)))
-
-		queueUtilization.Set(
-			float64(len(connChan)) / float64(QUEUE_SIZE),
-		)
 	}
 }
 
@@ -170,13 +265,17 @@ func serveClient(conn net.Conn) {
 		conn.Close()
 	}()
 
-	// Set the deadline, so that the connection will not be hanging forever.
 	conn.SetReadDeadline(
+		time.Now().Add(5 * time.Second),
+	)
+
+	conn.SetWriteDeadline(
 		time.Now().Add(5 * time.Second),
 	)
 
 	start := time.Now()
 
+	// Artificial processing delay
 	time.Sleep(500 * time.Millisecond)
 
 	reader := bufio.NewReader(conn)
@@ -196,7 +295,9 @@ func serveClient(conn net.Conn) {
 	status := StatusNotFound
 	body := "Not Found"
 
-	if parsedReq.Method == "GET" && parsedReq.Path == "/ping" {
+	if parsedReq.Method == "GET" &&
+		parsedReq.Path == "/ping" {
+
 		status = StatusOK
 		body = "pong"
 	}
@@ -223,12 +324,15 @@ func getRequest(reader *bufio.Reader) (string, error) {
 
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			return "", fmt.Errorf("client request error: %w", err)
+			return "", fmt.Errorf(
+				"client request error: %w",
+				err,
+			)
 		}
 
 		req.WriteString(line)
 
-		// End of headers
+		// End of HTTP headers
 		if strings.TrimSpace(line) == "" {
 			break
 		}
@@ -282,7 +386,11 @@ func parseRequest(raw string) (*Request, error) {
 	return req, nil
 }
 
-func writeResponse(conn net.Conn, status string, body string) {
+func writeResponse(
+	conn net.Conn,
+	status string,
+	body string,
+) {
 
 	resp := fmt.Sprintf(
 		"HTTP/1.1 %s\r\n"+
